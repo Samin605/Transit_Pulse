@@ -1,62 +1,89 @@
-TransitPulse
-Predicts hourly bus ridership per route for transport planners, using MTA (New York) data. CT-378 Machine Learning, Fall 2026 semester project. Data is from New York because Karachi has no public passenger-count data.
+# TransitPulse
 
-Live links:
+Predicts **hourly bus ridership per route** for transport planners, using MTA (New York) data.
+CT-378 Machine Learning, Fall 2026 semester project. Data is from New York because Karachi has no public passenger-count data.
 
-Streamlit app: https://ml-project-wuwhhjv3aqsnuxh5x5tdwi.streamlit.app/
-Hugging Face model card: https://huggingface.co/ayanjawed/transitpulse-planning-model
-Hugging Face Space (the model runs in your browser): https://huggingface.co/spaces/ayanjawed/TransitPulse
-Local FastAPI app with /predict: see "Run the apps locally" below
-Data (three sources)
-MTA Bus Hourly Ridership: Beginning 2025 (NY Open Data, dataset gxb3-akrn), through the Socrata API.
-MTA GTFS static bus schedules (gtfs_zips/, six feeds).
-Open-Meteo historical weather (New York City).
-Plus US federal holidays (holidays package) and an approximate hand-typed NYC school calendar. Details, licences and dates are in data/SOURCES.md. Result: 64,512 rows (24 routes x eight 2-week windows in 2025).
+**Live links:**
+- Streamlit app: https://ml-project-wuwhhjv3aqsnuxh5x5tdwi.streamlit.app/
+- Hugging Face model card: https://huggingface.co/ayanjawed/transitpulse-planning-model
+- Hugging Face Space (the model runs in your browser): https://huggingface.co/spaces/ayanjawed/TransitPulse
+- Local FastAPI app with `/predict`: see "Run the apps locally" below
 
-Setup
+## Data (three sources)
+1. MTA Bus Hourly Ridership: Beginning 2025 (NY Open Data, dataset `gxb3-akrn`), through the Socrata API.
+2. MTA GTFS static bus schedules (`gtfs_zips/`, six feeds).
+3. Open-Meteo historical weather (New York City).
+
+Plus US federal holidays (`holidays` package) and an approximate hand-typed NYC school calendar.
+Details, licences and dates are in `data/SOURCES.md`. Result: 64,512 rows (24 routes x eight 2-week windows in 2025).
+
+## Setup
+```bash
 python3.14 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-Extra packages to run the notebooks: jupyter nbconvert ipykernel nbformat. The pinned versions matter because the saved model is a pickle.
+```
+Extra packages to run the notebooks: `jupyter nbconvert ipykernel nbformat`. The pinned versions matter because the saved model is a pickle.
 
-Rebuild the data (optional, data/ is included)
+## Rebuild the data (optional, `data/` is included)
+```bash
 .venv/bin/python build_transit_dataset.py
-Uses the live MTA, GTFS and Open-Meteo services. gtfs_zips/ is reused if present.
+```
+Uses the live MTA, GTFS and Open-Meteo services. `gtfs_zips/` is reused if present.
 
-Notebooks (run in order from notebooks/)
-Notebook	What it does
-01_eda.ipynb	Exploratory analysis, plots saved to figures/
-02_modelling.ipynb	Split, baselines, 4 algorithms, tuning, test results, saves models/*.joblib (about 5 min)
-03_ablation.ipynb	How much each data source adds
-04_robustness.ipynb	Other splits: blocked, leave-one-window-out, unseen routes
-05_improvements.ipynb	Input changes tried (fewer weather columns adopted, typical-ridership column rejected)
-Results (test set: last 17 days, scored once)
-Model	MAE (riders per route-hour)	R2	Baseline MAE
-Planning model (deployed; no recent ridership needed)	65.4	0.92	78.0
-History model (needs recent ridership)	39.0	0.97	54.1
-The average route-hour has about 450 riders, so the planning model's typical error is about 14.5%. Main limits: one city, 24 routes, eight 2-week windows of one year; some routes changed level during the year and the planning model cannot know that. See the notebooks for details.
+## Notebooks (run in order from `notebooks/`)
+| Notebook | What it does |
+|---|---|
+| `01_eda.ipynb` | Exploratory analysis, plots saved to `figures/` |
+| `02_modelling.ipynb` | Split, baselines, 4 algorithms, tuning, test results, saves `models/*.joblib` (about 5 min) |
+| `03_ablation.ipynb` | How much each data source adds |
+| `04_robustness.ipynb` | Other splits: blocked, leave-one-window-out, unseen routes |
+| `05_improvements.ipynb` | Input changes tried (fewer weather columns adopted, typical-ridership column rejected) |
 
-Run the apps locally
-Local web app (FastAPI, HTML front end, POST /predict):
+## Results (test set: last 17 days, scored once)
+| Model | MAE (riders per route-hour) | R2 | Baseline MAE |
+|---|---|---|---|
+| Planning model (deployed; no recent ridership needed) | 65.4 | 0.92 | 78.0 |
+| History model (needs recent ridership) | 39.0 | 0.97 | 54.1 |
 
+The average route-hour has about 450 riders, so the planning model's typical error is about 14.5%.
+Main limits: one city, 24 routes, eight 2-week windows of one year; some routes changed level during the year and the planning model cannot know that. See the notebooks for details.
+
+## Run the apps locally
+Local web app (FastAPI, HTML front end, `POST /predict`):
+```bash
 cd app
 ../.venv/bin/uvicorn api:app --port 8000
+```
 Open http://localhost:8000. Example request:
-
+```bash
 curl -X POST localhost:8000/predict -H "Content-Type: application/json" \
   -d '{"route": "M15+", "date": "2025-09-23", "hour": 8}'
-Optional "weather": {"temperature_2m": 15, "precipitation": 0, "snowfall": 0, "wind_speed_10m": 10}. Invalid input returns HTTP 400 with an error message. Valid routes: the 24 in app/lookup/routes.csv. Valid dates: 2025-01-06 to 2027-06-30. 2025 dates (to 2025-09-28) use the recorded weather; later dates get Open-Meteo weather (archive for past days, forecast up to 16 days ahead) unless all four weather values are given. Every answer includes predicted_riders, likely_range (± typical_error = 56, the validation MAE), daily_profile, warnings (for months the model never saw and dates after the training data) and weather_source. Weather data by Open-Meteo.com (CC BY 4.0).
+```
+Optional `"weather": {"temperature_2m": 15, "precipitation": 0, "snowfall": 0, "wind_speed_10m": 10}`.
+Invalid input returns HTTP 400 with an `error` message. Valid routes: the 24 in `app/lookup/routes.csv`.
+Valid dates: 2025-01-06 to 2027-06-30. 2025 dates (to 2025-09-28) use the recorded weather; later dates get Open-Meteo weather
+(archive for past days, forecast up to 16 days ahead) unless all four weather values are given. Every answer includes
+`predicted_riders`, `likely_range` (± `typical_error` = 56, the validation MAE), `daily_profile`, `warnings`
+(for months the model never saw and dates after the training data) and `weather_source`. Weather data by Open-Meteo.com (CC BY 4.0).
 
 Streamlit app:
-
+```bash
 .venv/bin/streamlit run app/streamlit_app.py
-Hugging Face files are generated by .venv/bin/python app/build_hf_space.py into hf_space/ (Space) and hf_model/ (model card). Hugging Face now needs a paid plan for Spaces that run Python, so the Space is a free static page: the script exports the model's 500 trees to model.json and the lookup tables to data.json, and app/static_space/predict.js adds the trees up exactly like scikit-learn. Check it with .venv/bin/python app/verify_static_space.py (needs Node.js): it compares every dataset row, every route and date, and the error messages with the Python model.
+```
 
-Deploy
-The saved models are in models/ (the apps load models/planning_model.joblib).
+Hugging Face files are generated by `.venv/bin/python app/build_hf_space.py` into `hf_space/` (Space) and `hf_model/` (model card).
+Hugging Face now needs a paid plan for Spaces that run Python, so the Space is a free **static** page:
+the script exports the model's 500 trees to `model.json` and the lookup tables to `data.json`, and `app/static_space/predict.js`
+adds the trees up exactly like scikit-learn. Check it with `.venv/bin/python app/verify_static_space.py` (needs Node.js):
+it compares every dataset row, every route and date, and the error messages with the Python model.
 
-Streamlit Community Cloud: at share.streamlit.io, create an app from this repo, branch main, main file app/streamlit_app.py; in Advanced settings choose Python 3.14 (or 3.12/3.13; numpy 2.5 needs 3.12 or newer).
-Hugging Face model repo: create a model repo, then hf upload <user>/<model-repo> hf_model/ .
-Hugging Face Space: create a Space with the Static SDK, then hf upload <user>/<space> hf_space/ . --repo-type space.
-Local FastAPI: see "Run the apps locally" above.
-Repository layout
-build_transit_dataset.py data builder | data/ dataset and sources | gtfs_zips/ schedule feeds | notebooks/ analysis | figures/ plots | models/ saved pipelines | app/ apps and shared code | hf_space/, hf_model/ generated Hugging Face files | report/ project report (Word) | CLAUDE.md project notes.
+## Deploy
+The saved models are in `models/` (the apps load `models/planning_model.joblib`).
+- **Streamlit Community Cloud:** at share.streamlit.io, create an app from this repo, branch `main`, main file `app/streamlit_app.py`; in Advanced settings choose Python 3.14 (or 3.12/3.13; numpy 2.5 needs 3.12 or newer).
+- **Hugging Face model repo:** create a model repo, then `hf upload <user>/<model-repo> hf_model/ .`
+- **Hugging Face Space:** create a Space with the **Static** SDK, then `hf upload <user>/<space> hf_space/ . --repo-type space`.
+- **Local FastAPI:** see "Run the apps locally" above.
+
+## Repository layout
+`build_transit_dataset.py` data builder | `data/` dataset and sources | `gtfs_zips/` schedule feeds | `notebooks/` analysis | `figures/` plots |
+`models/` saved pipelines | `app/` apps and shared code | `hf_space/`, `hf_model/` generated Hugging Face files | `report/` project report (Word) | `CLAUDE.md` project notes.
